@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Bio-Inspired Pattern Simulator</title>
+  <style>
+    body { font-family: Arial,sans-serif; background: #f0f4f7; margin: 0; padding: 20px; }
+    h2 { margin-top: 0; }
+    #container { max-width: 850px; margin: auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 16px #0001; padding: 30px; }
+    canvas { border: 1px solid #bbb; background: #fff; display: block; margin: 20px 0; }
+    .row { display: flex; gap: 18px; flex-wrap: wrap; }
+    .col { flex: 1 1 260px; }
+    label { display: block; margin: 7px 0 3px; }
+    input, select, button { margin-bottom: 10px; font-size: 1rem; }
+    input[type="text"], input[type="number"] { width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 3px; }
+    button { padding: 6px 18px; border-radius: 3px; border: none; background: #007acc; color: #fff; cursor: pointer; font-weight: bold; }
+    button:hover { background: #004d70;}
+    #status { min-height: 24px; padding: 5px 0; }
+    .param-group { margin-bottom: 8px;}
+  </style>
+</head>
+<body>
+  <div id="container">
+    <h2>Bio-Inspired Pattern Simulator 🔬</h2>
+    <div class="row">
+      <div class="col" style="max-width:240px;">
+        <label for="mode">Pattern Mode</label>
+        <select id="mode">
+          <option value="dna">DNA Barcoding</option>
+          <option value="fractal">Honeycomb Fractal</option>
+          <option value="silk">Spider Silk</option>
+        </select>
+        <div id="inputs"></div>
+        <div class="param-group">
+          <button onclick="generatePattern()">Generate</button>
+          <button onclick="verifyPattern()">Verify</button>
+          <button onclick="generatePattern()">Re-Simulate</button>
+        </div>
+        <div id="status"></div>
+      </div>
+      <div class="col" style="min-width:350px;">
+        <canvas id="patternCanvas" width="360" height="360"></canvas>
+      </div>
+    </div>
+  </div>
+<script>
+// Pattern parameters and minimal sample database for demo/mock verification
+const dnaDB = { "Homo sapiens": "ATGCATTG", "Apis mellifera": "GCTTAGCA", "Pan troglodytes": "CAGGTCAT" };
+
+// On-load input generator
+function getParamHTML(mode) {
+  if (mode === "dna") return `
+    <label for="species">Species Name/ID</label>
+    <input id="species" type="text" placeholder="e.g. Apis mellifera">
+    <label for="seqmap">DNA Nucleotide Map (e.g. A:11 T:00 C:01 G:10)</label>
+    <input id="seqmap" type="text" value="A:11 T:00 C:01 G:10">
+    <label for="dnaseq">Custom Sequence (optional)</label>
+    <input id="dnaseq" type="text">
+  `;
+  if (mode === "fractal") return `
+    <label for="sealid">Seal ID / Data</label>
+    <input id="sealid" type="text" placeholder="e.g. 12345" />
+    <label for="fractald">Fractal Depth (2-6)</label>
+    <input id="fractald" type="number" min="2" max="6" value="4">
+  `;
+  if (mode === "silk") return `
+    <label for="threadid">Thread ID / Data</label>
+    <input id="threadid" type="text" placeholder="e.g. SPDR-42" />
+    <label for="density">Thread Density (10-80)</label>
+    <input id="density" type="number" min="10" max="80" value="35">
+  `;
+  return "";
+}
+
+document.getElementById("mode").onchange = function () {
+  document.getElementById("inputs").innerHTML = getParamHTML(this.value);
+};
+document.getElementById("inputs").innerHTML = getParamHTML("dna");
+
+// Main Pattern Generator
+function generatePattern() {
+  const mode = document.getElementById("mode").value;
+  const canvas = document.getElementById("patternCanvas"), ctx = canvas.getContext("2d");
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  document.getElementById("status").innerText = "";
+  if (mode === "dna") {
+    const species = document.getElementById("species").value.trim();
+    let seqInput = document.getElementById("dnaseq").value.trim();
+    const seqmap = document.getElementById("seqmap").value.trim();
+    if (!seqInput) seqInput = dnaDB[species] || "ATCGTACG";
+    drawDNA(seqInput.toUpperCase(), seqmap, ctx, canvas.width, canvas.height);
+    document.getElementById("status").innerText = "DNA barcode generated.";
+  }
+  else if (mode === "fractal") {
+    const sealid = document.getElementById("sealid").value.trim();
+    let depth = parseInt(document.getElementById("fractald").value,10);
+    if (isNaN(depth) || depth<2) depth = 4;
+    drawHoneycomb(sealid, depth, ctx, canvas.width/2, canvas.height/2, 120, 0, 0);
+    document.getElementById("status").innerText = "Honeycomb fractal generated.";
+  }
+  else if (mode === "silk") {
+    const threadid = document.getElementById("threadid").value.trim();
+    let density = parseInt(document.getElementById("density").value,10);
+    if (isNaN(density) || density<10) density = 35;
+    drawSilk(threadid, density, ctx, canvas.width, canvas.height);
+    document.getElementById("status").innerText = "Spider silk pattern generated.";
+  }
+}
+
+// DNA Barcoding visualization
+function drawDNA(seq, mapping, ctx, W, H) {
+  ctx.clearRect(0, 0, W, H);
+  // User mapping: e.g., "A:11 T:00 C:01 G:10"
+  const colorMap = {"A":"#0066cc","T":"#ffb300","C":"#00cc66","G":"#ff376d"};
+  let mapObj = {};
+  mapping.split(/s+/).forEach(pair=>{
+    let [base, bin] = pair.split(":").map(s => s.trim());
+    if("ATCG".includes(base) && bin) mapObj[base] = bin;
+  });
+  // Convert bases to binary with user map
+  const blockW = Math.floor(W/seq.length), blockH = H-20;
+  for (let i=0; i<seq.length; ++i) {
+    const ch = seq[i];
+    ctx.fillStyle = colorMap[ch] || "#ccc";
+    ctx.fillRect(i*blockW+2, 12, blockW-4, blockH-20);
+    ctx.font = "15px monospace";
+    ctx.fillStyle = "#333";
+    ctx.fillText((mapObj[ch]||"??"), i*blockW+blockW/2-11, H-6);
+  }
+}
+
+// Honeycomb Fractal visualization
+function drawHoneycomb(seed, depth, ctx, cx, cy, radius, angle, hashBit) {
+  if (depth <= 0) return;
+  // Seed->hash->color
+  let hVal = Math.abs(hashString(seed+depth+angle)) % 360;
+  ctx.strokeStyle = `hsl(${hVal},70%,50%)`;
+  ctx.beginPath();
+  for (let i=0;i<6;i++) {
+    let a = angle + Math.PI/3*i;
+    let x = cx + radius * Math.cos(a), y = cy + radius * Math.sin(a);
+    if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.closePath(); ctx.stroke();
+  // Draw fractal recurse
+  if (depth > 1) {
+    for (let i=0;i<6;i++) {
+      let a = angle + Math.PI/3*i;
+      let nx = cx + radius * Math.cos(a);
+      let ny = cy + radius * Math.sin(a);
+      drawHoneycomb(seed, depth-1, ctx, nx, ny, radius/3, angle, hashBit^i);
+    }
+  }
+}
+
+// Spider Silk visualization
+function drawSilk(id, density, ctx, W, H) {
+  ctx.clearRect(0,0,W,H);
+  // Seed-based PRNG for unique but deterministic pattern
+  let rng = mulberry32(hashString(id));
+  for (let i=0; i<density; i++) {
+    ctx.beginPath();
+    let x = W/2, y = H/2; // center
+    ctx.moveTo(x, y);
+    let threads = Math.floor(7+rng()*7);
+    for (let t=0; t<threads; t++) {
+      let r = 125 + rng()*70;
+      let a = rng()*2*Math.PI;
+      let tx = x + r * Math.cos(a) + rng()*30;
+      let ty = y + r * Math.sin(a) + rng()*30;
+      ctx.strokeStyle = `rgba(${120+120*rng()|0},${80+90*rng()|0},${180+70*rng()|0},${0.26+0.45*rng()})`;
+      ctx.lineTo(tx, ty);
+      x = tx; y = ty;
+    }
+    ctx.stroke();
+  }
+}
+
+// PRNG for repeatable patterns by ID
+function mulberry32(a) { return function() { var t = a += 0x6D2B79F5; t = Math.imul(t ^ t>>>15, t | 1); t ^= t + Math.imul(t ^ t>>>7, t | 61); return ((t^=t>>>14)>>>0)/4294967296; }; }
+// Fast hash from string
+function hashString(str) {var h=0,s=0;for(var i=0;i<str.length;i++){s=str.charCodeAt(i);h=((h<<5)-h)+s;h|=0;}return h;}
+
+// Verify simulation (mock matching / tamper check)
+function verifyPattern() {
+  const mode = document.getElementById("mode").value;
+  let res = 'Verification result: ';
+  if (mode === "dna") {
+    const species = document.getElementById("species").value.trim();
+    const seq = document.getElementById("dnaseq").value.trim();
+    if (species in dnaDB) {
+      res += (seq?seq===dnaDB[species]:true) ? "Species match found." : "Input does not match known sequence!";
+    } else {
+      res += "Species not in database.";
+    }
+  }
+  else if (mode === "fractal") {
+    const sealid = document.getElementById("sealid").value.trim();
+    const hash1 = hashString(sealid);
+    // For demo: treat even hashes as valid
+    res += ((hash1&1)===0) ? "Seal untampered / valid." : "Seal verification failed!";
+  }
+  else if (mode === "silk") {
+    const threadid = document.getElementById("threadid").value.trim();
+    const hashv = hashString(threadid);
+    // For demo: require hash to be divisible by 3
+    res += ((hashv%3)===0) ? "Thread ID valid (unique pattern)." : "Pattern not verified!";
+  }
+  document.getElementById("status").innerText = res;
+}
+</script>
+</body>
+</html>
